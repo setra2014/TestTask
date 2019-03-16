@@ -100,32 +100,24 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
-            play.setEnabled(false);
-            getFirstAudio.setEnabled(false);
-            getSecondAudio.setEnabled(false);
-            seekBar.setEnabled(false);
+            unlockInterface(false);
         }
 
         //цикличное воспроизведение треков
         @Override
         protected Void doInBackground(Void...arg0){
-            int i = 0;
-            long sleepDuration;                                           //длительность ожидания воспроизведения следующего трека
             try {
+                //воспроизведение первого трека без увеличесния громкости в начале
+                TaskBegin taskBegin = new TaskBegin();
+                taskBegin.execute();
+
+                //цикл воспроизведения треков с кроссфейдом
                 while (true) {
-                    playerArr[i].start();
-                    if (playerArr[i].getDuration() > (seekBar.getProgress() + 2) * 1000) {
-                        sleepDuration = playerArr[i].getDuration() - seekBar.getProgress() * 1000;
-                    }
-                    else {                                               //если трек длится меньше заданного для кроссфейда времени,
-                        sleepDuration = playerArr[i].getDuration();      //то следующий начнется сразу после окончания текущего
-                    }
+                    TaskSecondAudio taskSecond = new TaskSecondAudio();
+                    taskSecond.execute();
 
-                    try {
-                        TimeUnit.MILLISECONDS.sleep(sleepDuration);
-                    } catch (InterruptedException e) {}
-
-                    i = i == 1 ? 0 : 1;
+                    TaskFirstAudio taskFirst = new TaskFirstAudio();
+                    taskFirst.execute();
                 }
             }
             catch (NullPointerException e){
@@ -138,18 +130,110 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
                     }
                 });
             }
-
             return null;
         }
+
 
         //разблокировка кнопок и SeekBar'a
         @Override
         protected void onPostExecute(Void result) {
             super.onPostExecute(result);
-            seekBar.setEnabled(true);
-            play.setEnabled(true);
-            getFirstAudio.setEnabled(true);
-            getSecondAudio.setEnabled(true);
+            unlockInterface(true);
+        }
+    }
+
+    //поток для воспроизведения 1 трека без увеличения громкости в начале
+    public class TaskBegin extends AsyncTask <Void, Void, Void> {
+
+        final int CrossFade = (seekBar.getProgress()+2) * 1000;             //длительность кроссфейда
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            playerArr[0].start();
+            playerArr[0].setVolume(1,1);
+            int sleepDuration = playerArr[0].getDuration() - CrossFade;
+            try { TimeUnit.MILLISECONDS.sleep(sleepDuration); } catch (InterruptedException e) {}
+
+        }
+
+        @Override
+        protected Void doInBackground(Void... arg0) {
+            reduceVolume(0, CrossFade);
+            return null;
+        }
+    }
+
+    //поток для воспроизведения 1 трека с кроссфейдом
+    public class TaskFirstAudio extends AsyncTask <Void, Void, Void> {
+
+        final int CrossFade = (seekBar.getProgress()+2) * 1000;         //длительность кроссфейда
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            playerArr[0].setVolume(0, 0);
+            playerArr[0].start();
+            increaseVolume(0, CrossFade);                           //плавное увеличение громкости
+            int sleepDuration = playerArr[0].getDuration() - 2*CrossFade;
+            try {
+                TimeUnit.MILLISECONDS.sleep(sleepDuration);
+            } catch (InterruptedException e) {}
+        }
+
+        @Override
+        protected Void doInBackground(Void... arg0) {
+            reduceVolume(0, CrossFade);                             //плавное уменьшение громкости
+            return null;
+        }
+    }
+
+    //поток для воспроизведения 2 трека
+    public class TaskSecondAudio extends AsyncTask <Void, Void, Void>{
+        final int CrossFade = (seekBar.getProgress()+2)*1000;             //длительность кроссфейда
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            playerArr[1].setVolume(0,0);
+            playerArr[1].start();
+            increaseVolume(1, CrossFade);                           //плавное увеличение громкости
+            long sleepDuration = playerArr[1].getDuration() - 2*CrossFade;
+            try{ TimeUnit.MILLISECONDS.sleep(sleepDuration);} catch (InterruptedException e){}
+        }
+
+        @Override
+        protected Void doInBackground(Void... arg0) {
+            reduceVolume(1, CrossFade);                             //плавное уменьшение громкости
+            return null;
+        }
+    }
+
+    //метод разблокировки/блокировки элементов интерфейса
+    public void unlockInterface(boolean bool){
+        seekBar.setEnabled(bool);
+        play.setEnabled(bool);
+        getFirstAudio.setEnabled(bool);
+        getSecondAudio.setEnabled(bool);
+    }
+
+    //метод плавного увеличения громкости
+    public void increaseVolume(int index, int CrossFade){
+        for (float i = 0.1f ; i <= 1; i+=0.1f) {
+            playerArr[index].setVolume(i, i);
+            try {
+                TimeUnit.MILLISECONDS.sleep(CrossFade / 10);
+            } catch (InterruptedException e) { }
+        }
+    }
+
+    //метод плавного уменьшения громкости
+    public void reduceVolume(int index, int CrossFade){
+        for (float i = 0.9f; i >= 0; i-=0.1f) {
+            playerArr[index].setVolume(i, i);
+            try {
+                TimeUnit.MILLISECONDS.sleep(CrossFade / 10);
+            } catch (InterruptedException e) { }
         }
     }
 }
